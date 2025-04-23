@@ -43,29 +43,110 @@ BEGIN
     END
 END
 
--- Insert dummy data into products table
-INSERT INTO products (product_id, product_name, stock_quantity)
-VALUES 
-    ('PRD001', 'Laptop ASUS TUF Gaming', 25),
-    ('PRD002', 'Samsung Galaxy S23', 40);
 
--- Insert dummy data into salesman table
-INSERT INTO salesman (salesman_id, full_name, phone)
-VALUES 
-    ('SLS001', 'Budi Santoso', '081234567890'),
-    ('SLS002', 'Dewi Anggraini', '085678901234');
-
--- Insert dummy data into delivery table
-INSERT INTO delivery (delivery_id, delivery_date, salesman_id, product_id, quantity)
-VALUES 
-    ('DEL001', '2025-03-10', 'SLS001', 'PRD001', 2),
-    ('DEL002', '2025-03-13', 'SLS002', 'PRD002', 5);
 
 select * from products
 select * from salesman
 select * from delivery
 
-INSERT INTO delivery (delivery_id, delivery_date, salesman_id, product_id, quantity)
+
+-- Create sequences for salesman and products
+CREATE SEQUENCE seq_salesman_id
+    START WITH 1
+    INCREMENT BY 1;
+
+CREATE SEQUENCE seq_product_id
+    START WITH 1
+    INCREMENT BY 1;
+
+-- Create trigger for salesman table to auto-generate IDs with 'SLS' prefix
+IF EXISTS (SELECT * FROM sys.triggers WHERE name = 'tr_before_salesman_insert')
+    DROP TRIGGER tr_before_salesman_insert;
+
+CREATE TRIGGER tr_before_salesman_insert
+ON salesman
+INSTEAD OF INSERT
+AS
+BEGIN
+    INSERT INTO salesman (
+        salesman_id,
+        full_name,
+        phone
+    )
+    SELECT 
+        'SLS' + RIGHT('000' + CAST(NEXT VALUE FOR seq_salesman_id AS VARCHAR(3)), 3),
+        i.full_name,
+        i.phone
+    FROM inserted i;
+END;
+
+-- Create trigger for products table to auto-generate IDs with 'PRD' prefix
+IF EXISTS (SELECT * FROM sys.triggers WHERE name = 'tr_before_product_insert')
+    DROP TRIGGER tr_before_product_insert;
+
+CREATE TRIGGER tr_before_product_insert
+ON products
+INSTEAD OF INSERT
+AS
+BEGIN
+    INSERT INTO products (
+        product_id,
+        product_name,
+        stock_quantity
+    )
+    SELECT 
+        'PRD' + RIGHT('000' + CAST(NEXT VALUE FOR seq_product_id AS VARCHAR(3)), 3),
+        i.product_name,
+        COALESCE(i.stock_quantity, 0)
+    FROM inserted i;
+END;
+
+-- Create a sequence to generate incremental numbers for delivery_id
+CREATE SEQUENCE seq_delivery_id
+    START WITH 1
+    INCREMENT BY 1;
+
+-- Drop existing trigger if it exists
+IF EXISTS (SELECT * FROM sys.triggers WHERE name = 'tr_before_delivery_insert')
+    DROP TRIGGER tr_before_delivery_insert;
+
+-- Create a trigger that will set delivery_id with 'DEL' prefix before insert
+CREATE TRIGGER tr_before_delivery_insert
+ON delivery
+INSTEAD OF INSERT
+AS
+BEGIN
+    -- Insert into delivery table with modified delivery_id
+    INSERT INTO delivery (
+        delivery_id, 
+        delivery_date, 
+        salesman_id, 
+        product_id, 
+        quantity,
+        created_at
+    )
+    SELECT 
+        'DEL' + RIGHT('000' + CAST(NEXT VALUE FOR seq_delivery_id AS VARCHAR(3)), 3),
+        i.delivery_date,
+        i.salesman_id,
+        i.product_id,
+        i.quantity,
+        COALESCE(i.created_at, CURRENT_TIMESTAMP)
+    FROM inserted i;
+END;
+
+-- Now you can insert without specifying delivery_id or with a placeholder
+INSERT INTO salesman (full_name, phone)
 VALUES 
-    ('DEL001', '2025-03-10', 'SLS001', 'PRD001', 2),
-    ('DEL002', '2025-03-13', 'SLS002', 'PRD002', 5);
+    ('Joko Widodo', '081122334455'),
+    ('Siti Nurhaliza', '085566778899');
+
+-- Insert products without specifying product_id
+INSERT INTO products (product_name, stock_quantity)
+VALUES 
+    ('Macbook Pro M3', 15),
+    ('iPhone 15 Pro', 30);
+
+select * FROM delivery;
+select * FROM salesman;
+select * FROM products;
